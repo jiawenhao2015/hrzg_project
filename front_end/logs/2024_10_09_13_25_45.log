@@ -1,0 +1,19 @@
+[2024-10-09 13:25:45.144] {logconfig.py:26} INFO - start......
+[2024-10-09 13:25:53.701] {main.py:63} INFO - init_camera done...
+[2024-10-09 13:25:53.731] {main.py:66} INFO - init_postprocess done...
+[2024-10-09 13:25:54.992] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:25:55.016] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:25:56.685] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:25:56.705] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:25:58.422] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:25:58.437] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:00.206] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:00.224] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:01.882] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:01.899] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:03.924] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:03.943] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:05.710] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:05.731] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:07.475] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'
+[2024-10-09 13:26:07.498] {main.py:205} ERROR - 'numpy.ndarray' object has no attribute 'empty'

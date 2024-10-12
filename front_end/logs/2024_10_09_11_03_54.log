@@ -1,0 +1,33 @@
+[2024-10-09 11:03:54.208] {logconfig.py:26} INFO - start......
+[2024-10-09 11:04:02.723] {main.py:63} INFO - init_camera done...
+[2024-10-09 11:04:02.754] {main.py:66} INFO - init_postprocess done...
+[2024-10-09 11:04:02.815] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:02.816] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:03.819] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:03.820] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:04.821] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:04.821] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:05.822] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:05.822] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:06.823] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:06.824] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:07.825] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:07.825] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:08.827] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:08.827] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:09.829] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:09.829] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:10.831] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:10.831] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:11.833] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:11.833] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:12.833] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:12.834] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:13.835] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:13.835] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:14.836] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:14.837] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:15.837] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.
+[2024-10-09 11:04:15.837] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:16.839] {main.py:200} ERROR - There is no current event loop in thread 'Thread-3'.
+[2024-10-09 11:04:16.839] {main.py:200} ERROR - There is no current event loop in thread 'Thread-4'.

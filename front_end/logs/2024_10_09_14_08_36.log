@@ -1,0 +1,15 @@
+[2024-10-09 14:08:36.056] {logconfig.py:26} INFO - start......
+[2024-10-09 14:08:44.497] {main.py:63} INFO - init_camera done...
+[2024-10-09 14:08:44.528] {main.py:66} INFO - init_postprocess done...
+[2024-10-09 14:09:15.027] {main.py:205} ERROR - no close frame received or sent
+[2024-10-09 14:09:15.028] {main.py:205} ERROR - no close frame received or sent
+[2024-10-09 14:09:16.033] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:16.034] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:17.039] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:17.040] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:18.042] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:18.043] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:19.044] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:19.046] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:20.048] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)
+[2024-10-09 14:09:20.049] {main.py:205} ERROR - [Errno 111] Connect call failed ('127.0.0.1', 6666)

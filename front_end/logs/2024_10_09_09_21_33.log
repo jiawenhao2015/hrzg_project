@@ -1,0 +1,7 @@
+[2024-10-09 09:21:33.459] {logconfig.py:26} INFO - start......
+[2024-10-09 09:21:41.883] {main.py:63} INFO - init_camera done...
+[2024-10-09 09:21:46.312] {main.py:31} INFO - forwardButton click!!!!!!!!
+[2024-10-09 09:21:46.879] {main.py:45} INFO - stopButtonClick click!!!!!!!!
+[2024-10-09 09:21:47.334] {main.py:38} INFO - backwardButton click!!!!!!!!
+[2024-10-09 09:21:48.014] {main.py:31} INFO - forwardButton click!!!!!!!!
+[2024-10-09 09:21:49.022] {main.py:24} INFO - enablesystemBox click!!!!!!!!
