@@ -23,80 +23,35 @@ import ffmpeg
 Lock_tou = threading.Lock()
 Lock_wei = threading.Lock()
 import copy
+import base64
+import json
+import asyncio
+import websockets
 
 from config import *
 from logconfig import *
+from utils import *
 
-siemens = None
-plc_valid = False
+
+import queue
+to_send_que = queue.Queue()
+
+
+last_time_head = int(time.time() * 1000)
+last_time_tail = int(time.time() * 1000)
+
+cur_tail_dis = 9999
+last_tail_dis = 9999
+
+cur_head_dis = 9999
+last_head_dis = 9999
+
 
 picture_tou = None
 picture_wei = None
 
 model_tou = None
 model_wei = None
-
-
-class RTSCapture(cv2.VideoCapture):
-    """Real Time Streaming Capture.
-    这个类必须使用 RTSCapture.create 方法创建，请不要直接实例化
-    """
-
-    _cur_frame = None
-    _reading = False
-    schemes = ["rtsp://", "rtmp://"] #用于识别实时流
-
-    @staticmethod
-    def create(url, *schemes):
-        """实例化&初始化
-        rtscap = RTSCapture.create("rtsp://example.com/live/1")
-        or
-        rtscap = RTSCapture.create("http://example.com/live/1.m3u8", "http://")
-        """
-        rtscap = RTSCapture(url)
-        rtscap.frame_receiver = threading.Thread(target=rtscap.recv_frame, daemon=True)
-        rtscap.schemes.extend(schemes)
-        if isinstance(url, str) and url.startswith(tuple(rtscap.schemes)):
-            rtscap._reading = True
-        elif isinstance(url, int):
-            # 这里可能是本机设备
-            pass
-
-        return rtscap
-
-    def isStarted(self):
-        """替代 VideoCapture.isOpened() """
-        ok = self.isOpened()
-        if ok and self._reading:
-            ok = self.frame_receiver.is_alive()
-        return ok
-
-    def recv_frame(self):
-        """子线程读取最新视频帧方法"""
-        while self._reading and self.isOpened():
-            ok, frame = self.read()
-            if not ok: break
-            self._cur_frame = frame
-        self._reading = False
-
-    def read2(self):
-        """读取最新视频帧
-        返回结果格式与 VideoCapture.read() 一样
-        """
-        frame = self._cur_frame
-        self._cur_frame = None
-        return frame is not None, frame
-
-    def start_read(self):
-        """启动子线程读取视频帧"""
-        self.frame_receiver.start()
-        self.read_latest_frame = self.read2 if self._reading else self.read
-
-    def stop_read(self):
-        """退出子线程方法"""
-        self._reading = False
-        if self.frame_receiver.is_alive(): self.frame_receiver.join()
-
 
 def generate_pseudo_masks(config_file, checkpoint_file, dir_save_pseudo_masks, list_images):
     model = init_model(config_file, checkpoint_file, device='cuda:0')
@@ -207,130 +162,281 @@ def get_rtsp_tou(rtsp_url):
             cap = cv2.VideoCapture(rtsp_url)
 
 
-def init_PLC(plc_ip):
-    print('init PLC...')
-    siemens = SiemensS7Net(SiemensPLCS.S1500, plc_ip)
-    if siemens.ConnectServer().IsSuccess == True:
-        print ('\n plc  siemens s1500连接成功 !\n ')
-        plc_valid = True
-    else:
-	    print ('\n error plc  siemens s1500连接失败!\n ')
 
-def printReadResult(result):
-    if result.IsSuccess:
-        print(result.Content)
-    else:
-        print("read plc failed "+result.Message)
-def printWriteResult(result):
-    if result.IsSuccess:
-        print("write plc success")
-    else:
-        print("write plc falied  " + result.Message)
+async def post_to_frontend(websocket):
+    while 1:
+        try:
+            while not to_send_que.empty():
+                logger.info(to_send_que.qsize())
+                item = to_send_que.get()
+                await websocket.send(json.dumps(item))
 
-def control_roller(order):
-    if not plc_valid:
-        logger.warning("control_roller failed! plc init failed!")
-        return
-    if not enable_control:
-        logger.warning("control_roller failed! enable_control == false!, change it...")
-        return
+        except Exception as e:
+
+            logger.error(str(e))
+            traceback.print_exc()
+            time.sleep(0.1)
+
+
+
+def parse_head_pic(combine):
+    h,w,c = combine.shape
+    ori = combine[:,0:w//2,:].copy()
+    gray = combine[:,w//2:,0].copy()
+    mask = combine[:,w//2:,:].copy()
+    ori_bak = ori.copy()
+    mask_bak = mask.copy()
+    
+    cv2.line(ori, head_a, head_b, (0,0,255), 3)
+    cv2.line(mask, head_a, head_b, (0,0,255), 3)
+    
+
+    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    dis_list = []
+
+    for con in contours:
         
-    if order == roller_forward_code:
-        siemens.WriteBool(roller_forward_address,1)
-        printReadResult(siemens.ReadBool(roller_forward_address))
-    elif order == roller_backward_code:
-        siemens.WriteBool(roller_backward_address,1)
-        printReadResult(siemens.ReadBool(roller_backward_address))
-    elif order == roller_stop_code:
-        siemens.WriteBool(roller_stop_address,1)
-        printReadResult(siemens.ReadBool(roller_stop_address))
+        area = cv2.contourArea(con)
+        # if area < 5000:
+        #     continue
+        print('area:',area)
+        rect = cv2.minAreaRect(con)
+        
+        box = cv2.boxPoints(rect)
+        # 这一步不影响后面的画图，但是可以保证四个角点坐标为顺时针
+        startidx = box.sum(axis=1).argmin()
+        box = np.roll(box,4-startidx,0)
+        # 在原图上画出预测的外接矩形
+        box = box.reshape((-1,1,2)).astype(np.int32)
+        
+        cv2.polylines(mask,[box],True,(0,255,0),10)
+        
+        # 计算点到直线的垂直距离
+        point = (int(box[3][0][0]), int(box[3][0][1]))
+        #print('point:',point)
+        distance, intersection = point_to_line_distance_and_intersection(point, line_coefficients(head_a, head_b))
+        print(f"head 垂直距离: {distance}, 交点: {intersection}")
+        logger.info(f"head 垂直距离: {distance}, 交点: {intersection}")
+        dis_list.append(distance)
+        cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
+
+
+    combine = cv2.hconcat([ori, mask])
+    lin2 = cv2.hconcat([ori_bak, mask_bak])
+    combine = cv2.vconcat([lin2, combine])
+
+    cv2.imwrite(os.path.join('/home/user/hrzg/data/1027_online/tail/',datetime.now().strftime('%Y%m%d%H%M%S%f')+'_head.jpg'), combine)
+
+    ###control
+    if len(dis_list):
+        
+        dis_list = sorted(dis_list)
+        distance = dis_list[0]
+        
+        print('head dis:',distance)
+        
+        #需要补充判断是切头场景
+        
+        ###
+        #if distance > 50:
+            #钢坯需要回调
+            # print('head dis > 50 need back!!!!!!!!!!!!!')
+            # siemens.WriteBool(roller_before_saw_backward_address, 1)
+            # time.sleep(0.6)
+            # siemens.WriteBool(roller_before_saw_backward_address, 0)
+            
+
+
+    
+def parse_tail_pic(combine):
+
+    h,w,c = combine.shape
+    ori = combine[:,0:w//2,:].copy()
+    gray = combine[:,w//2:,0].copy()
+    mask = combine[:,w//2:,:].copy()
+    ori_bak = ori.copy()
+    mask_bak = mask.copy()
+    
+    cv2.line(ori, tail_a, tail_b, (0,0,255), 3)
+    cv2.line(ori, roller_a, roller_b, (0,255,255), 3)
+    cv2.line(mask, tail_a, tail_b, (0,0,255), 3)
+    cv2.line(mask, roller_a, roller_b, (0,255,255), 3)
+
+    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    dis_list = []
+
+    for con in contours:
+        
+        area = cv2.contourArea(con)
+        if area < 5000:
+            continue
+        print('area:',area)
+        rect = cv2.minAreaRect(con)
+        
+        box = cv2.boxPoints(rect)
+        # 这一步不影响后面的画图，但是可以保证四个角点坐标为顺时针
+        startidx = box.sum(axis=1).argmin()
+        box = np.roll(box,4-startidx,0)
+        # 在原图上画出预测的外接矩形
+        box = box.reshape((-1,1,2)).astype(np.int32)
+        #print(box)
+        # for i in range(4):
+        #     cv2.circle(ori, box[i][0], 3,(0,255,0))
+        #     cv2.putText(ori,str(i), box[i][0],0,1,(255,0,0),3)
+        
+        cv2.polylines(mask,[box],True,(0,255,0),10)
+        # cv2.drawContours(mask, [con], 0, (0,0,255), 3)
+
+        # 计算点到直线的垂直距离
+        point = (int(box[3][0][0]), int(box[3][0][1]))
+        #print('point:',point)
+        distance, intersection = point_to_line_distance_and_intersection(point, line_coefficients(tail_a, tail_b))
+        print(f"垂直距离: {distance}, 交点: {intersection}")
+        logger.info(f"垂直距离: {distance}, 交点: {intersection}")
+        dis_list.append(distance)
+        cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
+
+
+    combine = cv2.hconcat([ori, mask])
+    lin2 = cv2.hconcat([ori_bak, mask_bak])
+    combine = cv2.vconcat([lin2, combine])
+
+    cv2.imwrite(os.path.join('/home/user/hrzg/data/1027_online/tail/',datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg'), combine)
+
+    ###control
+    if len(dis_list):
+        
+        dis_list = sorted(dis_list)
+        distance = dis_list[0]
+        
+        # step = int(distance // 100)
+
+        # if step > 0:
+        #     step = step + 1
+        
+        # if step == 0:
+
+        #     # siemens.WriteBool(roller_before_saw_backward_address, 0)
+        #     # siemens.WriteBool(roller_before_saw_forward_address, 1)
+        #     # time.sleep(duration)
+        #     siemens.WriteBool(roller_before_saw_forward_address, 0)
+        # # else:
+        # #     siemens.WriteBool(roller_before_saw_backward_address, 0)
+        # #     siemens.WriteBool(roller_before_saw_forward_address, 1)
+        # #     time.sleep(0.7)
+
+
+        # logger.info('control....dis:' + str(distance) + ' step:' + str(step))
+
+        # for i in range(step):
+        #     duration = 0.8
+        #     logger.info('!!!!!!!!control...' + str(i) + ':' + str(step)+' duration:'+ str(duration))
+        #     control_roller(ROLLER_BEFORE_SAW, FORWARD_DIRECTION, duration)
+        #     time.sleep(0.1)
+        
+        
+        
+
+
+
+        ##run_time = 0.6 + distance/400
+        # global last_tail_dis
+        # if last_tail_dis < 250 and last_tail_dis > 60 and distance == last_tail_dis:
+        #     #说明钢坯停早了,
+        #     siemens.WriteBool(roller_before_saw_forward_address, 1)
+        #     time.sleep(0.6)
+        #     siemens.WriteBool(roller_before_saw_forward_address, 0)
+            
+
+        # if distance <  250:
+        #     logger.info('!!!!!!!!control...stop' )
+            
+        #     write_enable_control(flag_file_path, '0')
+
+        #     siemens.WriteBool(roller_before_saw_forward_address, 0)
+            
+            ###plc有一个现象,转完第一次,再转第二次会很短
+        last_tail_dis = distance
+
+    #检查头部是否多出   
+
+def predict(picture, head_or_tail):
+
+    img = copy.deepcopy(picture)
+   
+    model_result = None
+    if head_or_tail == 'head':
+        model_result = inference_model(model_tou, img)
     else:
-         logger.warning("control_roller failed, error order code " + order)
+        model_result = inference_model(model_wei, img)
 
 
-def predict_tou_bak(model_tou):
-
-    img = copy.deepcopy(picture_tou)
-    image_mmcv_from_opencv = mmcv.array_from_image(img)
-
-    model_result = inference_model(model_tou, image_mmcv_from_opencv)
-    
-    sem_seg = model_result.pred_sem_seg
-    sem_seg = sem_seg.cpu().data
-    ids = np.unique(sem_seg)[::-1]
-    legal_indices = ids < 2
-    ids = ids[legal_indices]
-    labels = np.array(ids, dtype=np.int64)
-
-    mask = np.zeros_like(img, dtype=np.uint8)
-    palette = [(0,0,0),(255,255,255)]
-    colors = [palette[label] for label in labels]
-    for label, color in zip(labels, colors):
-            mask[sem_seg[0] == label, :] = color
-
-
-def predict_tou(picture_tou):
-
-
-    img = copy.deepcopy(picture_tou)
-    # image_mmcv_from_opencv = mmcv.array_from_image(img)
-    image_mmcv_from_opencv = img
-
-    model_result = inference_model(model_tou, image_mmcv_from_opencv)
-    
     sem_seg = model_result.pred_sem_seg
     sem_seg = sem_seg.cpu().data
     
     mask_ = sem_seg[0].numpy().astype(np.uint8)*255
-    mask =np.expand_dims(mask_,axis=2)
-
-    mask = np.concatenate((mask, mask, mask), axis=-1)
-
-    combine = cv2.hconcat([picture_tou, mask])
-    cv2.imwrite('tmp_mask.png', combine)
-
-    pipe = sp.Popen(command_head, stdin=sp.PIPE) #,shell=False
-    pipe.stdin.write(mask.tobytes())  # 存入管道用于直播
-
-    logger.info('predict tou done 1')
-
-
-    # sem_seg = model_result.pred_sem_seg
-    # sem_seg = sem_seg.cpu().data
-    # ids = np.unique(sem_seg)[::-1]
-    # legal_indices = ids < 2
-    # ids = ids[legal_indices]
-    # labels = np.array(ids, dtype=np.int64)
-
-    # mask = np.zeros_like(img, dtype=np.uint8)
-    # palette = [(0,0,0),(255,255,255)]
-    # colors = [palette[label] for label in labels]
-    # for label, color in zip(labels, colors):
-    #         mask[sem_seg[0] == label, :] = color
-
-
-def predict_wei(picture_wei):
-
-    img = copy.deepcopy(picture_wei)
-    # image_mmcv_from_opencv = mmcv.array_from_image(img)
-    image_mmcv_from_opencv = img
-
-    model_result = inference_model(model_wei, image_mmcv_from_opencv)
+    mask = np.expand_dims(mask_,axis=2)
     
-    sem_seg = model_result.pred_sem_seg
-    sem_seg = sem_seg.cpu().data
+
+    mask = np.concatenate((mask, mask, mask), axis=-1)    
+    combine = cv2.hconcat([picture, mask])
+
+    # cv2.imwrite('save/combine_'+ datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg',combine)
+    # logger.info('combine save done.......')
+
     
-    mask_ = sem_seg[0].numpy().astype(np.uint8)*255
-    mask =np.expand_dims(mask_,axis=2)
 
-    mask = np.concatenate((mask, mask, mask), axis=-1)
+    if head_or_tail == 'head':
+        parse_head_pic(combine)
+    else:
+        parse_tail_pic(combine)
 
-    # combine = cv2.hconcat([picture_tou, mask])
+
+
+    # if DEBUG:
+   
+    
+    
+    # current_time = int(time.time() * 1000)
+    
+    # global last_time_head
+    # global last_time_tail
+    # print("=====current_time - last_time_head ", current_time - last_time_head , 'head or tail :', head_or_tail)
+    # # if (current_time - last_time_head > 1000) and head_or_tail == 'head':
+    # cv2.imwrite(os.path.join('/home/user/hrzg/data/1022_online/head/',datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg'), combine)
+    # last_time_head = current_time
+    # # elif ((current_time - last_time_tail > 1000)  and head_or_tail == 'tail' ):
+    # # cv2.imwrite(os.path.join('/home/user/hrzg/data/1022_online/tail/',datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg'), combine)
+    # # last_time_tail = current_time
+    
+    
+
+
+
+
+
+
+    
+    # _, buffer = cv2.imencode('.png', mask)
+    # image_str = base64.b64encode(buffer).decode('utf-8')
+    
+    # data_map = {
+    #     'image': image_str,
+    #     'head_or_tail': head_or_tail
+    # }
+    # to_send_que.put(data_map)
+
+
+    # combine = cv2.hconcat([picture, mask])
     # cv2.imwrite('tmp_mask.png', combine)
 
-    pipe = sp.Popen(command_tail, stdin=sp.PIPE) #,shell=False
-    pipe.stdin.write(mask.tobytes())  # 存入管道用于直播
-
+    
     # sem_seg = model_result.pred_sem_seg
     # sem_seg = sem_seg.cpu().data
     # ids = np.unique(sem_seg)[::-1]
@@ -344,6 +450,88 @@ def predict_wei(picture_wei):
     # for label, color in zip(labels, colors):
     #         mask[sem_seg[0] == label, :] = color
 
+
+
+
+
+class RTSCapture(cv2.VideoCapture):
+    """Real Time Streaming Capture.
+    这个类必须使用 RTSCapture.create 方法创建，请不要直接实例化
+    """
+
+    _cur_frame = None
+    _reading = False
+    schemes = ["rtsp://", "rtmp://"] #用于识别实时流
+    head_or_tail = 'head'
+    @staticmethod
+    def create(url, *schemes):
+        """实例化&初始化
+        rtscap = RTSCapture.create("rtsp://example.com/live/1")
+        or
+        rtscap = RTSCapture.create("http://example.com/live/1.m3u8", "http://")
+        """
+        rtscap = RTSCapture(url)
+        rtscap.frame_receiver = threading.Thread(target=rtscap.recv_frame, daemon=True)
+        rtscap.schemes.extend(schemes)
+
+        if url.find('.102') > 0:
+            rtscap.head_or_tail = 'tail'
+        if isinstance(url, str) and url.startswith(tuple(rtscap.schemes)):
+            rtscap._reading = True
+        elif isinstance(url, int):
+            # 这里可能是本机设备
+            pass
+
+        return rtscap
+
+    def isStarted(self):
+        """替代 VideoCapture.isOpened() """
+        ok = self.isOpened()
+        if ok and self._reading:
+            ok = self.frame_receiver.is_alive()
+        return ok
+
+    def recv_frame(self):
+        """子线程读取最新视频帧方法"""
+        while self._reading and self.isOpened():
+            ok, frame = self.read()
+            if not ok: break
+            self._cur_frame = frame
+        self._reading = False
+
+    def read2(self):
+        """读取最新视频帧
+        返回结果格式与 VideoCapture.read() 一样
+        """
+        frame = self._cur_frame
+        self._cur_frame = None
+        return frame is not None, frame
+
+    def start_read(self):
+        """启动子线程读取视频帧"""
+        self.frame_receiver.start()
+        self.read_latest_frame = self.read2 if self._reading else self.read
+
+    def stop_read(self):
+        """退出子线程方法"""
+        self._reading = False
+        if self.frame_receiver.is_alive(): self.frame_receiver.join()
+
+
+
+    def fetch_rtsp_loop(self):
+        self.start_read()
+        while 1:
+            flag , frame = self.read2()
+            if flag:
+                # print(datetime.now().strftime('%Y%m%d%H%M%S%f'), frame.shape)
+                # cv2.imwrite("save/vc" + datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg', frame)
+                logger.info(self.head_or_tail + ' predict start')
+                predict(frame, self.head_or_tail)
+                
+                
+                logger.info(self.head_or_tail + ' predict done')
+            #time.sleep(2)    
 
 
 
@@ -352,14 +540,17 @@ class Camera:
         def __init__(self, url):
             self.init = False
             self.url = url
-          
+            self.head_or_tail = 'head'
             self.args = {
                 "rtsp_transport": "tcp",
                 "fflags": "nobuffer",
                 "flags": "low_delay",
                 "loglevel": "quiet"
             }    # 添加参数
-          
+
+            if self.url.find('.102') > 0:
+                self.head_or_tail = 'tail'
+            
             self.width = 1280
             self.height = 720
            
@@ -379,7 +570,7 @@ class Camera:
 
                 if self.init == False:
                     
-                    time.sleep(2)
+                    time.sleep(1)
 
                     self.process1 = (ffmpeg.input(self.url, **self.args).output('pipe:', format='rawvideo', pix_fmt='rgb24')
                         .overwrite_output().run_async(pipe_stdout=True))
@@ -391,24 +582,33 @@ class Camera:
                         self.init = True
 
                     continue
+                
+                # self.process1 = (ffmpeg.input(self.url, **self.args).output('pipe:', format='rawvideo', pix_fmt='rgb24')
+                #         .overwrite_output().run_async(pipe_stdout=True))
+
 
                 in_bytes = self.process1.stdout.read(self.width * self.height * 3)     # 读取图片
                 if not in_bytes:
                     logger.warning('self.process1.stdout.read is none...')
-                    time.sleep(2)
+                    time.sleep(1)
                     self.init = False
                     continue
-                # 转成ndarray
+                
                 in_frame = (np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3]))
                 frame = cv2.cvtColor(in_frame, cv2.COLOR_RGB2BGR)  # 转成BGR
                 
-                if self.url.find('.101') > 0:
-                    #predict tou
-                    predict_tou(frame)
+
+                if self.head_or_tail  == 'head':
+                    time.sleep(1)
+                    continue
+
+                cv2.imwrite('save/frame_'+ datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg',frame)
+                logger.info('frame save done.......')
+                predict(frame, self.head_or_tail)
+                
+                
+                logger.info(self.head_or_tail + ' predict done')
                     
-                else:
-                   predict_wei(frame)
-               
                 
                 
             self.process1.kill()             
@@ -422,26 +622,37 @@ if __name__ == '__main__':
     logger.info('project start....')
     
 
-    model_tou = init_model(config_file, checkpoint_file_wei)
-    model_wei = init_model(config_file, checkpoint_file_wei)
+    model_tou = init_model(config_file_head, checkpoint_file_head)
+    model_wei = init_model(config_file_tail, checkpoint_file_tail)
 
 
 
     logger.info('init model done....')
 
     
-    t1 = threading.Thread(target=Camera(rtsp_tou).display)
-    t2 = threading.Thread(target=Camera(rtsp_wei).display)
+    # t1 = threading.Thread(target=Camera(rtsp_tou).display)
+    # t2 = threading.Thread(target=Camera(rtsp_wei).display)
 
 
-    logger.info('rtsp_tou wei thread done....')
+    rtscap_tail = RTSCapture.create(rtsp_wei)
+    rtscap_head = RTSCapture.create(rtsp_tou)
 
+    t1 = threading.Thread(target=rtscap_head.fetch_rtsp_loop)
+    t2 = threading.Thread(target=rtscap_tail.fetch_rtsp_loop)
+
+
+    logger.info('t1 t2 thread done....')
 
 
     t1.start()
     t2.start()
 
     
+    # start_server = websockets.serve(post_to_frontend,'127.0.0.1',6666) 
+    # asyncio.get_event_loop().run_until_complete(start_server)
+    # logger.info('websockets server done...')
+    # asyncio.get_event_loop().run_forever()
+
     t1.join()
     t2.join()
 

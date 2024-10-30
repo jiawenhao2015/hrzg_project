@@ -1,8 +1,14 @@
 
-config_file = '/home/user/hrzg/work/mmsegmentation/configs/ddrnet/ddrnet_23_in1k-pre_2xb6-120k_cityscapes-1024x1024-hrzg.py'
+config_file_head = '/home/user/hrzg/work/mmsegmentation/work_dir/1017_ddrnet_head_v1/config.py'
+config_file_tail = '/home/user/hrzg/work/mmsegmentation/work_dir/1018_ddrnet_tail_v1/config.py'
 
-checkpoint_file_wei = '/home/user/hrzg/work/mmsegmentation/work_dir/0924_ddrnet_v_0/iter_72000.pth'
-checkpoint_file_tou = '/home/user/hrzg/work/mmsegmentation/work_dir/0924_ddrnet_v_0/iter_72000.pth'
+
+checkpoint_file_tail= '/home/user/hrzg/work/mmsegmentation/work_dir/1025_finetune_coldsteel_tail/iter_3600.pth'
+#checkpoint_file_tail = '/home/user/hrzg/work/mmsegmentation/work_dir/1018_ddrnet_tail_v1/iter_108000.pth'
+# checkpoint_file_head = '/home/user/hrzg/work/mmsegmentation/work_dir/1017_ddrnet_head_v1/iter_120000.pth'
+checkpoint_file_head = '/home/user/hrzg/work/mmsegmentation/work_dir/1026_finetune_coldstell_head/iter_8400.pth'
+
+
 
 dir_save_pseudo_masks = '/home/user/hrzg/work/mmsegmentation/work_dir/0924_ddrnet_v_0/test_show_72000'
 
@@ -52,10 +58,7 @@ command_tail= [
 
 
 
-
-
-
-enable_control = False
+# enable_control = False
 
 plc_ip = '192.168.0.20'
 plc_port = 502
@@ -70,6 +73,17 @@ roller_forward_address = "M666.0"
 roller_backward_address = "M666.1"
 roller_stop_address = "M666.2"
 
-#尾部相机画面锯切位置标定 a(x,y) b(x,y)  w,h
-wei_a = (1,420)
-wei_b = (309,110)
+
+
+#old 
+before_saw_forward_address = 'M666.4'
+before_saw_backward_address = 'M666.5'
+after_saw_forward_address = 'M666.6'
+after_saw_backward_address = 'M666.7'
+
+
+# #尾部相机画面锯切位置标定 a(x,y) b(x,y)  w,h
+# wei_a = (1,420)
+# wei_b = (309,110)
+
+# DEBUG=False
