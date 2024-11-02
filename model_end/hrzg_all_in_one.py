@@ -89,6 +89,7 @@ def parse_head_pic(combine):
     contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     dis_list_cut_head = []
+    dis_list_cut_tail = []
 
     for con in contours:
         
@@ -118,6 +119,16 @@ def parse_head_pic(combine):
         cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
 
+        #切尾distance记录
+        point = (int(box[0][0][0]), int(box[0][0][1]))
+        distance, intersection = point_to_line_distance_and_intersection(point, line_coefficients(tail_a, tail_b))
+        dis_list_cut_tail.append(distance)
+
+        #切尾distance 可视化
+        cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
+
 
     combine = cv2.hconcat([ori, mask])
     lin2 = cv2.hconcat([ori_bak, mask_bak])
@@ -128,8 +139,14 @@ def parse_head_pic(combine):
     ###control
     if len(dis_list_cut_head):
         
-        dis_list_cut_head = sorted(dis_list_cut_head)
-        distance = dis_list_cut_head[0]
+        sorted_list = []
+
+        if CUT_HEAD:
+            sorted_list = sorted(dis_list_cut_head)
+        else:
+            sorted_list = sorted(dis_list_cut_tail)
+            
+        distance = sorted_list[0]
         
         print('head dis:',distance)
         
@@ -192,7 +209,17 @@ def parse_tail_pic(combine):
         print(f"垂直距离: {distance}, 交点: {intersection}")
         logger.info(f"垂直距离: {distance}, 交点: {intersection}")
         dis_list_cut_head.append(distance)
-        
+
+        cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
+        cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
+
+        #切尾distance记录
+        point = (int(box[2][0][0]), int(box[2][0][1]))
+        distance, intersection = point_to_line_distance_and_intersection(point, line_coefficients(tail_a, tail_b))
+        dis_list_cut_tail.append(distance)
+
+        #切尾distance 可视化
         cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
@@ -206,8 +233,14 @@ def parse_tail_pic(combine):
 
     ###control
     if len(dis_list_cut_head):
-        dis_list_cut_head = sorted(dis_list_cut_head)
-        distance = dis_list_cut_head[0]
+        sorted_list = []
+
+        if CUT_HEAD:
+            sorted_list = sorted(dis_list_cut_head)
+        else:
+            sorted_list = sorted(dis_list_cut_tail)
+            
+        distance = sorted_list[0]
 
         #run_time = 0.6 + distance/400
         global last_tail_dis
