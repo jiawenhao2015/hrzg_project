@@ -1,7 +1,6 @@
 import sys
 sys.path.append('/home/user/hrzg/work/mmsegmentation/mmseg/')
 
-
 from mmseg.apis import inference_model, init_model, show_result_pyplot
 import mmcv
 import torch
@@ -53,22 +52,10 @@ picture_wei = None
 model_tou = None
 model_wei = None
 
-def generate_pseudo_masks(config_file, checkpoint_file, dir_save_pseudo_masks, list_images):
-    model = init_model(config_file, checkpoint_file, device='cuda:0')
-    PALETTE = []
-    for i in range(150):
-        PALETTE.append([i, i, i])
-    model.PALETTE = PALETTE
 
-    if not os.path.exists(dir_save_pseudo_masks):
-        os.mkdir(dir_save_pseudo_masks)
+CUT_HEAD = True
+CUT_TAIL = False
 
-    for image_name in tqdm(list_images):
-        img = mmcv.imread(image_name)
-        result = inference_model(model, img)
-        #vis_result = show_result_pyplot(model, img, result, with_labels=False, show=False,opacity=0.2)
-        # mmcv.imwrite(vis_result, os.path.join(dir_save_pseudo_masks, image_name.split('/')[-1]))
- 
 
 def init_model_hrzg(config_file, checkpoint_file):
     print('init_model...')
@@ -80,103 +67,11 @@ def init_model_hrzg(config_file, checkpoint_file):
 
     print('init model success', checkpoint_file)
 
-
     img = mmcv.imread('test.jpg')
     for i in range(5):
         inference_model(model, img)
     print('warm up done...')
     return model
-
-
-def get_rtsp_wei(rtsp_url):
-    cap = cv2.VideoCapture(rtsp_url)
-    print(datetime.now().strftime('%Y%m%d%H%M%S%f'), "get_rtsp_wei|cap.isOpened():", cap.isOpened())
-
-    global picture_wei
-    cnt = 0
-    while True:
-        try:
-            ret, frame = cap.read()
-            if ret == 0:
-                print(datetime.now().strftime('%Y%m%d%H%M%S%f'), "get_rtsp_wei|read error")
-                Lock_wei.acquire()
-                picture_wei = None
-                Lock_wei.release()
-                cap.release()
-                cap = cv2.VideoCapture(rtsp_url)
-                continue
-            Lock_wei.acquire()
-            
-            picture_wei = copy.deepcopy(frame)
-            # cv2.imwrite("/mnt/nfs/jwh/code/debug/tmp/"+str(cnt)+'.jpg',picture)
-            # print('count--',cnt)
-            # cnt +=1
-            Lock_wei.release()
-            # count += 1
-            # print("get_rtsp|count: ",count)
-        except Exception as e:
-            print(datetime.now().strftime('%Y%m%d%H%M%S%f'), 'get_rtsp_wei|exception:', e)
-            traceback.print_exc()
-            Lock_wei.acquire()
-            picture_wei = None
-            Lock_wei.release()
-
-            cap.release()
-            cap = cv2.VideoCapture(rtsp_url)
-
-
-def get_rtsp_tou(rtsp_url):
-    cap = cv2.VideoCapture(rtsp_url)
-    print(datetime.now().strftime('%Y%m%d%H%M%S%f'), "get_rtsp_tou|cap.isOpened():", cap.isOpened())
-
-    global picture_tou
-    cnt = 0
-    while True:
-        try:
-            ret, frame = cap.read()
-            if ret == 0:
-                print(datetime.now().strftime('%Y%m%d%H%M%S%f'), "get_rtsp_tou|read error")
-                Lock_tou.acquire()
-                picture_tou = None
-                Lock_tou.release()
-                cap.release()
-                cap = cv2.VideoCapture(rtsp_url)
-                continue
-            Lock_tou.acquire()
-            
-            picture_tou = copy.deepcopy(frame)
-            # cv2.imwrite("/mnt/nfs/jwh/code/debug/tmp/"+str(cnt)+'.jpg',picture)
-            # print('count--',cnt)
-            # cnt +=1
-            Lock_tou.release()
-            # count += 1
-            # print("get_rtsp|count: ",count)
-        except Exception as e:
-            print(datetime.now().strftime('%Y%m%d%H%M%S%f'), 'get_rtsp_tou|exception:', e)
-            traceback.print_exc()
-            Lock_tou.acquire()
-            picture_tou = None
-            Lock_tou.release()
-
-            cap.release()
-            cap = cv2.VideoCapture(rtsp_url)
-
-
-
-async def post_to_frontend(websocket):
-    while 1:
-        try:
-            while not to_send_que.empty():
-                logger.info(to_send_que.qsize())
-                item = to_send_que.get()
-                await websocket.send(json.dumps(item))
-
-        except Exception as e:
-
-            logger.error(str(e))
-            traceback.print_exc()
-            time.sleep(0.1)
-
 
 
 def parse_head_pic(combine):
@@ -193,7 +88,7 @@ def parse_head_pic(combine):
 
     contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    dis_list = []
+    dis_list_cut_head = []
 
     for con in contours:
         
@@ -218,7 +113,7 @@ def parse_head_pic(combine):
         distance, intersection = point_to_line_distance_and_intersection(point, line_coefficients(head_a, head_b))
         print(f"head 垂直距离: {distance}, 交点: {intersection}")
         logger.info(f"head 垂直距离: {distance}, 交点: {intersection}")
-        dis_list.append(distance)
+        dis_list_cut_head.append(distance)
         cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
@@ -231,24 +126,22 @@ def parse_head_pic(combine):
     cv2.imwrite(os.path.join('/home/user/hrzg/data/1027_online/tail/',datetime.now().strftime('%Y%m%d%H%M%S%f')+'_head.jpg'), combine)
 
     ###control
-    if len(dis_list):
+    if len(dis_list_cut_head):
         
-        dis_list = sorted(dis_list)
-        distance = dis_list[0]
+        dis_list_cut_head = sorted(dis_list_cut_head)
+        distance = dis_list_cut_head[0]
         
         print('head dis:',distance)
         
         #需要补充判断是切头场景
         
         ###
-        #if distance > 50:
+        if distance > 50:
             #钢坯需要回调
-            # print('head dis > 50 need back!!!!!!!!!!!!!')
-            # siemens.WriteBool(roller_before_saw_backward_address, 1)
-            # time.sleep(0.6)
-            # siemens.WriteBool(roller_before_saw_backward_address, 0)
-            
-
+            print('head dis > 50 need back!!!!!!!!!!!!!')
+            siemens.WriteBool(roller_before_saw_backward_address, 1)
+            time.sleep(0.6)
+            siemens.WriteBool(roller_before_saw_backward_address, 0)
 
     
 def parse_tail_pic(combine):
@@ -267,7 +160,8 @@ def parse_tail_pic(combine):
 
     contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    dis_list = []
+    dis_list_cut_head = []
+    dis_list_cut_tail = []
 
     for con in contours:
         
@@ -297,7 +191,8 @@ def parse_tail_pic(combine):
         distance, intersection = point_to_line_distance_and_intersection(point, line_coefficients(tail_a, tail_b))
         print(f"垂直距离: {distance}, 交点: {intersection}")
         logger.info(f"垂直距离: {distance}, 交点: {intersection}")
-        dis_list.append(distance)
+        dis_list_cut_head.append(distance)
+        
         cv2.line(mask, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.line(ori, point, (int(intersection[0]),int(intersection[1])), (255,0,0), 3)
         cv2.putText(ori,str(int(distance)), point,0, 1,(255,0,0),3)
@@ -310,61 +205,31 @@ def parse_tail_pic(combine):
     cv2.imwrite(os.path.join('/home/user/hrzg/data/1027_online/tail/',datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg'), combine)
 
     ###control
-    if len(dis_list):
-        
-        dis_list = sorted(dis_list)
-        distance = dis_list[0]
-        
-        # step = int(distance // 100)
+    if len(dis_list_cut_head):
+        dis_list_cut_head = sorted(dis_list_cut_head)
+        distance = dis_list_cut_head[0]
 
-        # if step > 0:
-        #     step = step + 1
-        
-        # if step == 0:
+        #run_time = 0.6 + distance/400
+        global last_tail_dis
+        if last_tail_dis < 250 and last_tail_dis > 60 and distance == last_tail_dis:
+            #说明钢坯停早了,需要往前进
+            siemens.WriteBool(roller_before_saw_forward_address, 1)
+            time.sleep(0.6)
+            #time.sleep(run_time)
+            siemens.WriteBool(roller_before_saw_forward_address, 0)
 
-        #     # siemens.WriteBool(roller_before_saw_backward_address, 0)
-        #     # siemens.WriteBool(roller_before_saw_forward_address, 1)
-        #     # time.sleep(duration)
-        #     siemens.WriteBool(roller_before_saw_forward_address, 0)
-        # # else:
-        # #     siemens.WriteBool(roller_before_saw_backward_address, 0)
-        # #     siemens.WriteBool(roller_before_saw_forward_address, 1)
-        # #     time.sleep(0.7)
-
-
-        # logger.info('control....dis:' + str(distance) + ' step:' + str(step))
-
-        # for i in range(step):
-        #     duration = 0.8
-        #     logger.info('!!!!!!!!control...' + str(i) + ':' + str(step)+' duration:'+ str(duration))
-        #     control_roller(ROLLER_BEFORE_SAW, FORWARD_DIRECTION, duration)
-        #     time.sleep(0.1)
-        
-        
-        
-
-
-
-        ##run_time = 0.6 + distance/400
-        # global last_tail_dis
-        # if last_tail_dis < 250 and last_tail_dis > 60 and distance == last_tail_dis:
-        #     #说明钢坯停早了,
-        #     siemens.WriteBool(roller_before_saw_forward_address, 1)
-        #     time.sleep(0.6)
-        #     siemens.WriteBool(roller_before_saw_forward_address, 0)
+        #距离很近，需要停下
+        if distance <  250:
+            logger.info('!!!!!!!!control...stop' )
             
+            write_enable_control(flag_file_path, '0')
 
-        # if distance <  250:
-        #     logger.info('!!!!!!!!control...stop' )
+            siemens.WriteBool(roller_before_saw_forward_address, 0)
             
-        #     write_enable_control(flag_file_path, '0')
-
-        #     siemens.WriteBool(roller_before_saw_forward_address, 0)
-            
-            ###plc有一个现象,转完第一次,再转第二次会很短
+            ##plc有一个现象,转完第一次,再转第二次持续时间会很短
         last_tail_dis = distance
-
-    #检查头部是否多出   
+   
+    
 
 def predict(picture, head_or_tail):
 
@@ -398,7 +263,6 @@ def predict(picture, head_or_tail):
         parse_tail_pic(combine)
 
 
-
     # if DEBUG:
    
     
@@ -416,43 +280,6 @@ def predict(picture, head_or_tail):
     # # last_time_tail = current_time
     
     
-
-
-
-
-
-
-    
-    # _, buffer = cv2.imencode('.png', mask)
-    # image_str = base64.b64encode(buffer).decode('utf-8')
-    
-    # data_map = {
-    #     'image': image_str,
-    #     'head_or_tail': head_or_tail
-    # }
-    # to_send_que.put(data_map)
-
-
-    # combine = cv2.hconcat([picture, mask])
-    # cv2.imwrite('tmp_mask.png', combine)
-
-    
-    # sem_seg = model_result.pred_sem_seg
-    # sem_seg = sem_seg.cpu().data
-    # ids = np.unique(sem_seg)[::-1]
-    # legal_indices = ids < 2
-    # ids = ids[legal_indices]
-    # labels = np.array(ids, dtype=np.int64)
-
-    # mask = np.zeros_like(img, dtype=np.uint8)
-    # palette = [(0,0,0),(255,255,255)]
-    # colors = [palette[label] for label in labels]
-    # for label, color in zip(labels, colors):
-    #         mask[sem_seg[0] == label, :] = color
-
-
-
-
 
 class RTSCapture(cv2.VideoCapture):
     """Real Time Streaming Capture.
@@ -533,130 +360,27 @@ class RTSCapture(cv2.VideoCapture):
                 logger.info(self.head_or_tail + ' predict done')
             #time.sleep(2)    
 
-
-
-class Camera:
-
-        def __init__(self, url):
-            self.init = False
-            self.url = url
-            self.head_or_tail = 'head'
-            self.args = {
-                "rtsp_transport": "tcp",
-                "fflags": "nobuffer",
-                "flags": "low_delay",
-                "loglevel": "quiet"
-            }    # 添加参数
-
-            if self.url.find('.102') > 0:
-                self.head_or_tail = 'tail'
-            
-            self.width = 1280
-            self.height = 720
-           
-            self.process1 = (ffmpeg.input(url, **self.args).output('pipe:', format='rawvideo', pix_fmt='rgb24')
-                .overwrite_output().run_async(pipe_stdout=True))
-            
-            in_bytes = self.process1.stdout.read(self.width * self.height * 3)     # 读取图片
-            if not in_bytes:
-                logger.warning('self.process1.stdout.read is none...')
-            else:
-               self.init = True
-        
-
-        def display(self):
-            
-            while True:
-
-                if self.init == False:
-                    
-                    time.sleep(1)
-
-                    self.process1 = (ffmpeg.input(self.url, **self.args).output('pipe:', format='rawvideo', pix_fmt='rgb24')
-                        .overwrite_output().run_async(pipe_stdout=True))
-                    
-                    in_bytes = self.process1.stdout.read(self.width * self.height * 3)     # 读取图片
-                    if not in_bytes:
-                        logger.warning('self.process1.stdout.read is none...')
-                    else:
-                        self.init = True
-
-                    continue
-                
-                # self.process1 = (ffmpeg.input(self.url, **self.args).output('pipe:', format='rawvideo', pix_fmt='rgb24')
-                #         .overwrite_output().run_async(pipe_stdout=True))
-
-
-                in_bytes = self.process1.stdout.read(self.width * self.height * 3)     # 读取图片
-                if not in_bytes:
-                    logger.warning('self.process1.stdout.read is none...')
-                    time.sleep(1)
-                    self.init = False
-                    continue
-                
-                in_frame = (np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3]))
-                frame = cv2.cvtColor(in_frame, cv2.COLOR_RGB2BGR)  # 转成BGR
-                
-
-                if self.head_or_tail  == 'head':
-                    time.sleep(1)
-                    continue
-
-                cv2.imwrite('save/frame_'+ datetime.now().strftime('%Y%m%d%H%M%S%f')+'.jpg',frame)
-                logger.info('frame save done.......')
-                predict(frame, self.head_or_tail)
-                
-                
-                logger.info(self.head_or_tail + ' predict done')
-                    
-                
-                
-            self.process1.kill()             
-
-
-    
+  
 
 if __name__ == '__main__':
-    
+
    
     logger.info('project start....')
     
-
     model_tou = init_model(config_file_head, checkpoint_file_head)
     model_wei = init_model(config_file_tail, checkpoint_file_tail)
 
-
-
     logger.info('init model done....')
-
     
-    # t1 = threading.Thread(target=Camera(rtsp_tou).display)
-    # t2 = threading.Thread(target=Camera(rtsp_wei).display)
-
-
     rtscap_tail = RTSCapture.create(rtsp_wei)
     rtscap_head = RTSCapture.create(rtsp_tou)
 
     t1 = threading.Thread(target=rtscap_head.fetch_rtsp_loop)
     t2 = threading.Thread(target=rtscap_tail.fetch_rtsp_loop)
 
-
     logger.info('t1 t2 thread done....')
-
-
     t1.start()
     t2.start()
-
-    
-    # start_server = websockets.serve(post_to_frontend,'127.0.0.1',6666) 
-    # asyncio.get_event_loop().run_until_complete(start_server)
-    # logger.info('websockets server done...')
-    # asyncio.get_event_loop().run_forever()
-
     t1.join()
     t2.join()
-
-
-
-
 
